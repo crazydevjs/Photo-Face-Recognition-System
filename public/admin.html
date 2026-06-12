@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — Wedding Face Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="ring">💍</span> Wedding Face Finder</a>
+      <span class="badge">Admin Dashboard</span>
+    </header>
+
+    <section class="hero" style="padding: 10px 0 28px;">
+      <h1 id="eventTitle" style="font-size: clamp(1.6rem, 4vw, 2.4rem);">Loading…</h1>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><div class="value" id="statTotal">0</div><div class="label">Total Photos</div></div>
+      <div class="stat"><div class="value" id="statReady">0</div><div class="label">AI Indexed</div></div>
+      <div class="stat"><div class="value" id="statFaces">0</div><div class="label">Faces Found</div></div>
+      <div class="stat"><div class="value" id="statPending">0</div><div class="label">Pending</div></div>
+    </section>
+
+    <section class="card">
+      <h2>Guest Link</h2>
+      <p class="sub">Share this link or QR code with all your wedding guests.</p>
+      <div class="share-box">
+        <input type="text" id="guestLink" readonly />
+        <button class="btn btn-ghost" id="copyLinkBtn">📋 Copy</button>
+        <a class="btn btn-gold" id="openLinkBtn" target="_blank" rel="noopener">Open ↗</a>
+      </div>
+      <div class="qr-wrap">
+        <img id="qrImg" alt="Guest link QR code" />
+        <p class="sub" style="margin: 0; max-width: 320px;">Print this QR on your wedding card or table cards — guests just scan and find their photos.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Add Photos</h2>
+      <p class="sub">Upload from this device or import an entire Google Drive folder.</p>
+      <div class="tabs">
+        <button class="tab active" data-tab="upload">📤 Upload Photos</button>
+        <button class="tab" data-tab="drive">📁 Google Drive Link</button>
+      </div>
+      <div id="tab-upload">
+        <div class="dropzone" id="dropzone">
+          <span class="icon">🖼️</span>
+          <strong>Click to select photos</strong> or drag &amp; drop here<br />
+          <small>JPG, PNG, WEBP — up to 500 photos at once</small>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple class="hidden" />
+      </div>
+      <div id="tab-drive" class="hidden">
+        <div class="field">
+          <label for="driveLink">Public Google Drive folder link</label>
+          <input type="url" id="driveLink" placeholder="https://drive.google.com/drive/folders/..." />
+        </div>
+        <button class="btn btn-primary" id="driveImportBtn">Import from Drive 📥</button>
+        <p class="sub" style="margin-top: 12px;">Folder sharing must be set to <strong>“Anyone with the link”</strong>.</p>
+      </div>
+      <div class="progress-wrap hidden" id="uploadProgress">
+        <div class="progress-bar"><div class="progress-fill" id="uploadFill"></div></div>
+        <div class="progress-text"><span id="uploadLabel">Uploading…</span><span id="uploadPct">0%</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="result-head">
+        <div>
+          <h2>AI Face Indexing</h2>
+          <p class="sub" style="margin: 0;">Each photo is scanned for faces so guests can be matched instantly.</p>
+        </div>
+        <button class="btn btn-primary" id="processBtn">▶ Start Indexing</button>
+      </div>
+      <div class="progress-wrap" id="processProgress">
+        <div class="progress-bar"><div class="progress-fill" id="processFill"></div></div>
+        <div class="progress-text"><span id="processLabel">Idle</span><span id="processPct"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Photo Library</h2>
+      <p class="sub" id="libraryHint">No photos yet — add some above.</p>
+      <div class="gallery" id="photoGrid"></div>
+    </section>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <div class="lb-bar">
+      <button class="lb-btn" id="lbClose">✕</button>
+    </div>
+    <img id="lbImg" alt="" />
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

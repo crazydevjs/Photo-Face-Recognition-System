@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wedding Face Finder — AI Photo Delivery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="ring">💍</span> Wedding Face Finder</a>
+    </header>
+
+    <section class="hero">
+      <span class="badge">✦ AI Face Recognition</span>
+      <h1>Every guest finds <span class="accent">their photos</span> in seconds</h1>
+      <p>Upload your wedding photos or paste a Google Drive link. Share one magic link — guests scan their face and instantly get every photo they appear in.</p>
+    </section>
+
+    <section class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Create Event</h3>
+        <p>Name your wedding event and get a private admin dashboard.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Add Photos</h3>
+        <p>Upload photos directly or paste a public Google Drive folder link.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Share the Link</h3>
+        <p>Guests scan their face and download all their photos instantly.</p>
+      </div>
+    </section>
+
+    <section class="card" style="max-width: 520px; margin: 0 auto;">
+      <h2>Create Your Event</h2>
+      <p class="sub">It takes less than 10 seconds.</p>
+      <form id="createForm">
+        <div class="field">
+          <label for="eventName">Event Name</label>
+          <input type="text" id="eventName" placeholder="e.g. Rahul ❤ Priya Wedding" maxlength="80" required />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="createBtn">Create Event ✨</button>
+      </form>
+      <div id="myEvents"></div>
+    </section>
+
+    <p class="footer-note">Photos are matched using on-device AI embeddings. Faces are never stored as images.</p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/main.js"></script>
+</body>
+</html>

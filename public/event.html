@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Find Your Photos — Wedding Face Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="ring">💍</span> Wedding Face Finder</a>
+    </header>
+
+    <section class="hero" style="padding: 16px 0 24px;">
+      <span class="badge">✦ Guest Portal</span>
+      <h1 id="eventTitle" style="font-size: clamp(1.7rem, 4.5vw, 2.6rem);">Loading…</h1>
+      <p id="eventMeta"></p>
+    </section>
+
+    <section class="card scanner" id="scanCard">
+      <h2 class="serif">Scan Your Face</h2>
+      <p class="sub">Look at the camera — we'll find every photo you appear in.</p>
+      <div class="cam-frame" id="camFrame">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="scanline"></div>
+      </div>
+      <p class="status-msg" id="scanStatus">Allow camera access to begin</p>
+      <div class="actions">
+        <button class="btn btn-primary" id="scanBtn">📷 Scan My Face</button>
+        <button class="btn btn-ghost" id="selfieBtn">🖼️ Upload a Selfie</button>
+      </div>
+      <input type="file" id="selfieInput" accept="image/*" class="hidden" />
+    </section>
+
+    <section class="card hidden" id="resultsCard">
+      <div class="result-head">
+        <div>
+          <h2 class="serif" id="resultsTitle">Your Photos</h2>
+          <p class="sub" style="margin: 0;" id="resultsSub"></p>
+        </div>
+        <div class="actions" style="justify-content: flex-end;">
+          <button class="btn btn-gold" id="zipBtn">⬇ Download All (ZIP)</button>
+          <button class="btn btn-ghost" id="rescanBtn">↻ Scan Again</button>
+        </div>
+      </div>
+      <div class="gallery" id="resultsGrid"></div>
+      <div class="empty hidden" id="noResults">
+        <span class="icon">🔍</span>
+        <h3 class="serif">No photos found yet</h3>
+        <p>Try scanning again with better lighting, or the photographer may still be uploading photos.</p>
+      </div>
+    </section>
+
+    <p class="footer-note">Your face scan is processed on your device and never saved.</p>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <div class="lb-bar">
+      <a class="lb-btn" id="lbDownload" download>⬇</a>
+      <button class="lb-btn" id="lbClose">✕</button>
+    </div>
+    <img id="lbImg" alt="" />
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="/js/guest.js"></script>
+</body>
+</html>

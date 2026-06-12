@@ -1,0 +1,19 @@
+{
+  "name": "wedding-face-finder",
+  "version": "1.0.0",
+  "description": "AI powered wedding photo face recognition and delivery system",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.21.2",
+    "multer": "^2.1.1"
+  }
+}
