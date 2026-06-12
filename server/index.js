@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
-import { createEvent, getEvent, saveEvents, uid } from './store.js';
+import { initStore, createEvent, getEvent, addPhotos, updatePhoto, removePhoto, uid } from './store.js';
 import { extractFolderId, listImagesInFolder, driveImageUrls, driveDownloadUrls } from './drive.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -100,10 +100,10 @@ async function fetchFirstOk(urls) {
   return null;
 }
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', async (req, res) => {
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Event name is required' });
-  const event = createEvent(name);
+  const event = await createEvent(name);
   res.json({ id: event.id, name: event.name, adminKey: event.adminKey });
 });
 
@@ -126,23 +126,19 @@ app.get('/api/events/:id/admin', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/events/:id/photos', requireAdmin, upload.array('photos', 500), (req, res) => {
+app.post('/api/events/:id/photos', requireAdmin, upload.array('photos', 500), async (req, res) => {
   const files = req.files || [];
-  const added = files.map(file => {
-    const photo = {
-      id: uid(12),
-      type: 'upload',
-      name: file.originalname,
-      file: file.filename,
-      status: 'pending',
-      descriptors: [],
-      addedAt: new Date().toISOString()
-    };
-    req.event.photos.push(photo);
-    return photoView(req.event, photo, true);
-  });
-  saveEvents();
-  res.json({ added });
+  const photos = files.map(file => ({
+    id: uid(12),
+    type: 'upload',
+    name: file.originalname,
+    file: file.filename,
+    status: 'pending',
+    descriptors: [],
+    addedAt: new Date().toISOString()
+  }));
+  await addPhotos(req.event, photos);
+  res.json({ added: photos.map(p => photoView(req.event, p, true)) });
 });
 
 app.post('/api/events/:id/drive', requireAdmin, async (req, res) => {
@@ -156,10 +152,10 @@ app.post('/api/events/:id/drive', requireAdmin, async (req, res) => {
       });
     }
     const existing = new Set(req.event.photos.filter(p => p.driveId).map(p => p.driveId));
-    const added = [];
+    const photos = [];
     for (const file of files) {
       if (existing.has(file.id)) continue;
-      const photo = {
+      photos.push({
         id: uid(12),
         type: 'drive',
         name: file.name,
@@ -167,18 +163,16 @@ app.post('/api/events/:id/drive', requireAdmin, async (req, res) => {
         status: 'pending',
         descriptors: [],
         addedAt: new Date().toISOString()
-      };
-      req.event.photos.push(photo);
-      added.push(photoView(req.event, photo, true));
+      });
     }
-    saveEvents();
-    res.json({ added, foundInFolder: files.length });
+    await addPhotos(req.event, photos);
+    res.json({ added: photos.map(p => photoView(req.event, p, true)), foundInFolder: files.length });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
 });
 
-app.put('/api/events/:id/photos/:photoId/descriptors', requireAdmin, (req, res) => {
+app.put('/api/events/:id/photos/:photoId/descriptors', requireAdmin, async (req, res) => {
   const photo = req.event.photos.find(p => p.id === req.params.photoId);
   if (!photo) return res.status(404).json({ error: 'Photo not found' });
   if (req.body.status === 'failed') {
@@ -189,21 +183,19 @@ app.put('/api/events/:id/photos/:photoId/descriptors', requireAdmin, (req, res) 
     if (!Array.isArray(descriptors) || !descriptors.every(isDescriptor)) {
       return res.status(400).json({ error: 'Invalid descriptors payload' });
     }
-    photo.descriptors = descriptors;
+    photo.descriptors = descriptors.map(d => d.map(n => Math.round(n * 1e5) / 1e5));
     photo.status = 'done';
   }
-  saveEvents();
+  await updatePhoto(req.event, photo);
   res.json({ id: photo.id, status: photo.status, faces: photo.descriptors.length });
 });
 
-app.delete('/api/events/:id/photos/:photoId', requireAdmin, (req, res) => {
-  const index = req.event.photos.findIndex(p => p.id === req.params.photoId);
-  if (index === -1) return res.status(404).json({ error: 'Photo not found' });
-  const [photo] = req.event.photos.splice(index, 1);
+app.delete('/api/events/:id/photos/:photoId', requireAdmin, async (req, res) => {
+  const photo = await removePhoto(req.event, req.params.photoId);
+  if (!photo) return res.status(404).json({ error: 'Photo not found' });
   if (photo.type === 'upload') {
     fs.unlink(path.join(uploadsDir, req.event.id, photo.file), () => {});
   }
-  saveEvents();
   res.json({ removed: photo.id });
 });
 
@@ -291,6 +283,8 @@ app.use((err, req, res, next) => {
   console.error(err.message);
   res.status(500).json({ error: 'Something went wrong' });
 });
+
+await initStore();
 
 app.listen(PORT, () => {
   console.log(`Wedding Face Finder running on http://localhost:${PORT}`);
