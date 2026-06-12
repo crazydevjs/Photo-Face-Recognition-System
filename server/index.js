@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const publicDir = path.join(root, 'public');
 const uploadsDir = path.join(root, 'uploads');
-const MATCH_THRESHOLD = 0.52;
+const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD) || 0.5;
 const PORT = process.env.PORT || 3000;
 
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });

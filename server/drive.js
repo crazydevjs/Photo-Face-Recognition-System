@@ -85,8 +85,8 @@ function decodeEntities(text) {
 
 export function driveImageUrls(fileId) {
   return [
-    `https://lh3.googleusercontent.com/d/${fileId}=s1600`,
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+    `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
+    `https://drive.google.com/thumbnail?id=${fileId}&sz=w2048`,
     `https://drive.usercontent.google.com/download?id=${fileId}&export=view`
   ];
 }

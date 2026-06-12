@@ -129,12 +129,79 @@ function loadImage(src) {
   });
 }
 
+const detectorOptions = () => new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35 });
+const MIN_FACE_SIZE = 36;
+const TILE_THRESHOLD = 1400;
+const TILE_OVERLAP = 0.18;
+
+async function detectFaces(input) {
+  return faceapi.detectAllFaces(input, detectorOptions()).withFaceLandmarks().withFaceDescriptors();
+}
+
+function boxIou(a, b) {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const union = a.width * a.height + b.width * b.height - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+function makeTiles(width, height) {
+  const tiles = [];
+  const cols = 2;
+  const rows = 2;
+  const tileW = Math.ceil(width / cols);
+  const tileH = Math.ceil(height / rows);
+  const padX = Math.round(tileW * TILE_OVERLAP);
+  const padY = Math.round(tileH * TILE_OVERLAP);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = Math.max(0, col * tileW - padX);
+      const y = Math.max(0, row * tileH - padY);
+      const w = Math.min(width - x, tileW + padX * 2);
+      const h = Math.min(height - y, tileH + padY * 2);
+      tiles.push({ x, y, w, h });
+    }
+  }
+  return tiles;
+}
+
 async function extractDescriptors(img) {
-  const detections = await faceapi
-    .detectAllFaces(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
-    .withFaceLandmarks()
-    .withFaceDescriptors();
-  return detections.map(d => Array.from(d.descriptor));
+  const found = [];
+  const whole = await detectFaces(img);
+  for (const d of whole) {
+    const { x, y, width, height } = d.detection.box;
+    found.push({ box: { x, y, width, height }, score: d.detection.score, descriptor: d.descriptor });
+  }
+  if (Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height) > TILE_THRESHOLD) {
+    const tiles = makeTiles(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    for (const tile of tiles) {
+      canvas.width = tile.w;
+      canvas.height = tile.h;
+      ctx.drawImage(img, tile.x, tile.y, tile.w, tile.h, 0, 0, tile.w, tile.h);
+      const dets = await detectFaces(canvas);
+      for (const d of dets) {
+        const { x, y, width, height } = d.detection.box;
+        found.push({
+          box: { x: x + tile.x, y: y + tile.y, width, height },
+          score: d.detection.score,
+          descriptor: d.descriptor
+        });
+      }
+    }
+  }
+  found.sort((a, b) => b.score - a.score);
+  const kept = [];
+  for (const face of found) {
+    if (face.box.width < MIN_FACE_SIZE || face.box.height < MIN_FACE_SIZE) continue;
+    if (kept.some(k => boxIou(k.box, face.box) > 0.4)) continue;
+    kept.push(face);
+  }
+  return kept.map(face => Array.from(face.descriptor));
 }
 
 async function processPhotos() {
