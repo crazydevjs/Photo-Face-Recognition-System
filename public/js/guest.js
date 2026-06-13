@@ -90,14 +90,39 @@ function stopCamera() {
   els.video.srcObject = null;
 }
 
-async function detectDescriptor(input, minFaceWidth = 80) {
+function flipImage(input) {
+  const width = input.videoWidth || input.naturalWidth || input.width;
+  const height = input.videoHeight || input.naturalHeight || input.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(input, 0, 0, width, height);
+  return canvas;
+}
+
+async function detectDescriptor(input, minFaceWidth = 80, useFlip = false) {
   const detection = await faceapi
     .detectSingleFace(input, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
   if (!detection) return null;
   if (detection.detection.box.width < minFaceWidth) return { tooSmall: true };
-  return Array.from(detection.descriptor);
+  const descriptors = [Array.from(detection.descriptor)];
+  if (useFlip) {
+    const flipped = await faceapi
+      .detectSingleFace(flipImage(input), new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    if (flipped) descriptors.push(Array.from(flipped.descriptor));
+  }
+  return {
+    descriptor: averageDescriptors(descriptors),
+    score: detection.detection.score,
+    width: detection.detection.box.width
+  };
 }
 
 function averageDescriptors(descriptors) {
@@ -124,24 +149,25 @@ async function scanFromCamera() {
     if (!(await startCamera())) return;
     els.camFrame.classList.add('scanning');
     setStatus('Scanning… hold still and look at the camera');
-    const descriptors = [];
+    const samples = [];
     let sawTooSmall = false;
-    for (let attempt = 0; attempt < 10 && descriptors.length < 5; attempt++) {
+    for (let attempt = 0; attempt < 12 && samples.length < 7; attempt++) {
       const result = await detectDescriptor(captureFrame(), 120);
       if (result && result.tooSmall) {
         sawTooSmall = true;
       } else if (result) {
-        descriptors.push(result);
+        samples.push(result);
       }
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 260));
     }
     els.camFrame.classList.remove('scanning');
-    if (!descriptors.length) {
+    if (!samples.length) {
       setStatus(sawTooSmall ? 'Move closer to the camera and try again' : 'No face detected — try better lighting', 'error');
       return;
     }
-    const probes = descriptors.length > 1 ? [averageDescriptors(descriptors), ...descriptors] : descriptors;
-    await findMatches(probes);
+    samples.sort((a, b) => b.score - a.score);
+    const best = samples.slice(0, 5).map(s => s.descriptor);
+    await findMatches([averageDescriptors(best)]);
   } catch (err) {
     els.camFrame.classList.remove('scanning');
     setStatus(err.message, 'error');
@@ -163,7 +189,7 @@ async function scanFromSelfie(file) {
       image.onerror = () => reject(new Error('Could not read that image'));
       image.src = URL.createObjectURL(file);
     });
-    const result = await detectDescriptor(img, 60);
+    const result = await detectDescriptor(img, 60, true);
     URL.revokeObjectURL(img.src);
     if (!result) {
       setStatus('No face found in that selfie — try a clearer one', 'error');
@@ -173,7 +199,7 @@ async function scanFromSelfie(file) {
       setStatus('Face is too small in that photo — use a closer selfie', 'error');
       return;
     }
-    await findMatches([result]);
+    await findMatches([result.descriptor]);
   } catch (err) {
     setStatus(err.message, 'error');
   } finally {

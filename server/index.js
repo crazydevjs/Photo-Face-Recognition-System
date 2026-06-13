@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const publicDir = path.join(root, 'public');
 const uploadsDir = path.join(root, 'uploads');
-const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD) || 0.5;
+const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD) || 0.54;
 const PORT = process.env.PORT || 3000;
 
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -217,10 +217,12 @@ app.post('/api/events/:id/match', requireEvent, (req, res) => {
       }
     }
     if (best <= MATCH_THRESHOLD) {
-      matches.push({ ...photoView(req.event, photo), confidence: Math.round((1 - best) * 100) });
+      const confidence = Math.max(60, Math.min(99, Math.round(100 - (best / MATCH_THRESHOLD) * 40)));
+      matches.push({ ...photoView(req.event, photo), confidence, distance: best });
     }
   }
-  matches.sort((a, b) => b.confidence - a.confidence);
+  matches.sort((a, b) => a.distance - b.distance);
+  matches.forEach(m => delete m.distance);
   res.json({ matches, searched });
 });
 

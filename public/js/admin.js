@@ -149,15 +149,15 @@ function boxIou(a, b) {
 }
 
 function makeTiles(width, height) {
+  const longest = Math.max(width, height);
+  const grid = longest > 2600 ? 3 : 2;
   const tiles = [];
-  const cols = 2;
-  const rows = 2;
-  const tileW = Math.ceil(width / cols);
-  const tileH = Math.ceil(height / rows);
+  const tileW = Math.ceil(width / grid);
+  const tileH = Math.ceil(height / grid);
   const padX = Math.round(tileW * TILE_OVERLAP);
   const padY = Math.round(tileH * TILE_OVERLAP);
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
+  for (let row = 0; row < grid; row++) {
+    for (let col = 0; col < grid; col++) {
       const x = Math.max(0, col * tileW - padX);
       const y = Math.max(0, row * tileH - padY);
       const w = Math.min(width - x, tileW + padX * 2);

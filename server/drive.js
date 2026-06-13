@@ -10,67 +10,109 @@ export function extractFolderId(link) {
   return bare ? bare[1] : null;
 }
 
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const MAX_FOLDERS = 500;
+
 export async function listImagesInFolder(folderId) {
   const apiKey = process.env.GOOGLE_API_KEY;
-  if (apiKey) {
+  const files = [];
+  const seenFiles = new Set();
+  const visited = new Set();
+  const queue = [folderId];
+  let rootOk = false;
+  while (queue.length && visited.size < MAX_FOLDERS) {
+    const current = queue.shift();
+    if (visited.has(current)) continue;
+    visited.add(current);
+    let result;
     try {
-      return await listViaApi(folderId, apiKey);
+      result = apiKey ? await scanViaApi(current, apiKey) : await scanViaEmbed(current);
     } catch (err) {
-      console.error('Drive API failed, falling back to public scan:', err.message);
+      if (current === folderId && apiKey) {
+        try {
+          result = await scanViaEmbed(current);
+        } catch (embedErr) {
+          throw embedErr;
+        }
+      } else if (current === folderId) {
+        throw err;
+      } else {
+        continue;
+      }
+    }
+    rootOk = true;
+    for (const image of result.images) {
+      if (seenFiles.has(image.id)) continue;
+      seenFiles.add(image.id);
+      files.push(image);
+    }
+    for (const sub of result.folders) {
+      if (!visited.has(sub)) queue.push(sub);
     }
   }
-  return listViaEmbed(folderId);
+  if (!rootOk) {
+    throw new Error('Folder is not accessible. Make sure sharing is set to "Anyone with the link".');
+  }
+  return files;
 }
 
-async function listViaApi(folderId, apiKey) {
-  const files = [];
+async function scanViaApi(folderId, apiKey) {
+  const images = [];
+  const folders = [];
   let pageToken = '';
   do {
     const url = new URL('https://www.googleapis.com/drive/v3/files');
     url.searchParams.set('q', `'${folderId}' in parents and trashed=false`);
     url.searchParams.set('fields', 'nextPageToken,files(id,name,mimeType)');
     url.searchParams.set('pageSize', '1000');
+    url.searchParams.set('includeItemsFromAllDrives', 'true');
+    url.searchParams.set('supportsAllDrives', 'true');
     url.searchParams.set('key', apiKey);
     if (pageToken) url.searchParams.set('pageToken', pageToken);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Drive API responded with ${res.status}`);
     const data = await res.json();
     for (const file of data.files || []) {
-      if (file.mimeType && file.mimeType.startsWith('image/')) {
-        files.push({ id: file.id, name: file.name });
+      if (file.mimeType === FOLDER_MIME) {
+        folders.push(file.id);
+      } else if (file.mimeType && file.mimeType.startsWith('image/')) {
+        images.push({ id: file.id, name: file.name });
       }
     }
     pageToken = data.nextPageToken || '';
   } while (pageToken);
-  return files;
+  return { images, folders };
 }
 
-async function listViaEmbed(folderId) {
-  const res = await fetch(`https://drive.google.com/embeddedfolderview?id=${folderId}`, {
+async function scanViaEmbed(folderId) {
+  const res = await fetch(`https://drive.google.com/embeddedfolderview?id=${folderId}#grid`, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
   });
   if (!res.ok) {
     throw new Error('Folder is not accessible. Make sure sharing is set to "Anyone with the link".');
   }
   const html = await res.text();
-  const files = [];
-  const seen = new Set();
-  const patterns = [
-    /file\/d\/([A-Za-z0-9_-]{10,})[\s\S]{0,600}?flip-entry-title">([^<]+)</g,
-    /id="entry-([A-Za-z0-9_-]{10,})"[\s\S]{0,600}?flip-entry-title">([^<]+)</g
-  ];
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(html))) {
-      const id = match[1];
-      const name = decodeEntities(match[2].trim());
-      if (seen.has(id)) continue;
-      seen.add(id);
-      if (IMAGE_EXT.test(name)) files.push({ id, name });
-    }
-    if (files.length) break;
+  const images = [];
+  const fileIds = new Set();
+  const filePattern = /file\/d\/([A-Za-z0-9_-]{10,})[\s\S]{0,800}?flip-entry-title">([^<]+)</g;
+  let match;
+  while ((match = filePattern.exec(html))) {
+    const id = match[1];
+    if (fileIds.has(id)) continue;
+    fileIds.add(id);
+    const name = decodeEntities(match[2].trim());
+    if (IMAGE_EXT.test(name)) images.push({ id, name });
   }
-  return files;
+  const folders = [];
+  const folderSeen = new Set();
+  const entryPattern = /id="entry-([A-Za-z0-9_-]{10,})"/g;
+  while ((match = entryPattern.exec(html))) {
+    const id = match[1];
+    if (id === folderId || fileIds.has(id) || folderSeen.has(id)) continue;
+    folderSeen.add(id);
+    folders.push(id);
+  }
+  return { images, folders };
 }
 
 function decodeEntities(text) {
