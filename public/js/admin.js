@@ -111,6 +111,12 @@ async function loadEvent() {
 async function ensureModels() {
   if (modelsReady) return;
   els.processLabel.textContent = 'Loading AI models…';
+  if (faceapi.tf) {
+    try {
+      await faceapi.tf.setBackend('webgl');
+      await faceapi.tf.ready();
+    } catch {}
+  }
   await Promise.all([
     faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
     faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -119,12 +125,22 @@ async function ensureModels() {
   modelsReady = true;
 }
 
-function loadImage(src) {
+function loadImage(src, timeout = 30000) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Image failed to load'));
+    const timer = setTimeout(() => {
+      img.src = '';
+      reject(new Error('Image load timed out'));
+    }, timeout);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error('Image failed to load'));
+    };
     img.src = src;
   });
 }
@@ -133,6 +149,7 @@ const detectorOptions = () => new faceapi.SsdMobilenetv1Options({ minConfidence:
 const MIN_FACE_SIZE = 36;
 const TILE_THRESHOLD = 1400;
 const TILE_OVERLAP = 0.18;
+const INDEX_CONCURRENCY = 4;
 
 async function detectFaces(input) {
   return faceapi.detectAllFaces(input, detectorOptions()).withFaceLandmarks().withFaceDescriptors();
@@ -220,37 +237,44 @@ async function processPhotos() {
   els.processBtn.textContent = '⏸ Stop';
   try {
     await ensureModels();
+    const total = queue.length;
     let done = 0;
-    for (const photo of queue) {
-      if (stopRequested) break;
-      els.processLabel.textContent = `Indexing ${photo.name}`;
-      try {
-        const img = await loadImage(photo.src);
-        const descriptors = await extractDescriptors(img);
-        const result = await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ descriptors })
-        });
-        photo.status = result.status;
-        photo.faces = result.faces;
-      } catch {
+    let cursor = 0;
+    const worker = async () => {
+      while (!stopRequested) {
+        const index = cursor++;
+        if (index >= total) return;
+        const photo = queue[index];
         try {
-          await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
+          const img = await loadImage(photo.src);
+          const descriptors = await extractDescriptors(img);
+          const result = await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'failed' })
+            body: JSON.stringify({ descriptors })
           });
-        } catch {}
-        photo.status = 'failed';
+          photo.status = result.status;
+          photo.faces = result.faces;
+        } catch {
+          try {
+            await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'failed' })
+            });
+          } catch {}
+          photo.status = 'failed';
+        }
+        done++;
+        const pct = Math.round((done / total) * 100);
+        els.processFill.style.width = `${pct}%`;
+        els.processPct.textContent = `${done}/${total}`;
+        els.processLabel.textContent = `Indexing… ${done} of ${total}`;
+        updateTile(photo);
       }
-      done++;
-      const pct = Math.round((done / queue.length) * 100);
-      els.processFill.style.width = `${pct}%`;
-      els.processPct.textContent = `${done}/${queue.length}`;
-      updateTile(photo);
-    }
-    els.processLabel.textContent = stopRequested ? 'Paused' : 'Indexing complete 🎉';
+    };
+    await Promise.all(Array.from({ length: INDEX_CONCURRENCY }, worker));
+    els.processLabel.textContent = stopRequested ? 'Paused — press Start to resume' : 'Indexing complete 🎉';
     if (!stopRequested) showToast('All photos indexed — guests can now find their photos!');
   } catch (err) {
     els.processLabel.textContent = 'Error loading AI models';
