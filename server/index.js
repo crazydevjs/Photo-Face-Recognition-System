@@ -89,13 +89,28 @@ function isDescriptor(value) {
   return Array.isArray(value) && value.length === 128 && value.every(n => typeof n === 'number' && Number.isFinite(n));
 }
 
-async function fetchFirstOk(urls) {
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { redirect: 'follow' });
-      const type = res.headers.get('content-type') || '';
-      if (res.ok && !type.includes('text/html')) return res;
-    } catch {}
+async function fetchWithTimeout(url, ms = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { redirect: 'follow', signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchFirstOk(urls, rounds = 3) {
+  for (let round = 0; round < rounds; round++) {
+    for (const url of urls) {
+      try {
+        const res = await fetchWithTimeout(url);
+        const type = res.headers.get('content-type') || '';
+        if (res.ok && !type.includes('text/html')) return res;
+      } catch {}
+    }
+    if (round < rounds - 1) {
+      await new Promise(resolve => setTimeout(resolve, 700 * (round + 1)));
+    }
   }
   return null;
 }

@@ -221,13 +221,46 @@ async function extractDescriptors(img) {
   return kept.map(face => Array.from(face.descriptor));
 }
 
+async function indexPhoto(photo, attempts = 5) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (stopRequested) return;
+    try {
+      const separator = photo.src.includes('?') ? '&' : '?';
+      const src = attempt > 1 ? `${photo.src}${separator}retry=${attempt}` : photo.src;
+      const img = await loadImage(src, 60000);
+      const descriptors = await extractDescriptors(img);
+      const result = await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descriptors })
+      });
+      photo.status = result.status;
+      photo.faces = result.faces;
+      return;
+    } catch {
+      if (attempt < attempts && !stopRequested) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 3000));
+      }
+    }
+  }
+  if (stopRequested) return;
+  try {
+    await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'failed' })
+    });
+  } catch {}
+  photo.status = 'failed';
+}
+
 async function processPhotos() {
   if (processing) {
     stopRequested = true;
     els.processBtn.textContent = 'Stopping…';
     return;
   }
-  const queue = photos.filter(p => p.status === 'pending');
+  const queue = photos.filter(p => p.status === 'pending' || p.status === 'failed');
   if (!queue.length) {
     showToast('All photos are already indexed');
     return;
@@ -245,26 +278,7 @@ async function processPhotos() {
         const index = cursor++;
         if (index >= total) return;
         const photo = queue[index];
-        try {
-          const img = await loadImage(photo.src);
-          const descriptors = await extractDescriptors(img);
-          const result = await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ descriptors })
-          });
-          photo.status = result.status;
-          photo.faces = result.faces;
-        } catch {
-          try {
-            await api(`/api/events/${eventId}/photos/${photo.id}/descriptors`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'failed' })
-            });
-          } catch {}
-          photo.status = 'failed';
-        }
+        await indexPhoto(photo);
         done++;
         const pct = Math.round((done / total) * 100);
         els.processFill.style.width = `${pct}%`;
